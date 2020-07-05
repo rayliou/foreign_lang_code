@@ -1,0 +1,12 @@
+#word
+f1w1 f1w2 
+f1w3
+
+in the a that
+#phrasal
+f1ph1 f1ph1111
+f1ph2 f1ph2
+f1ph3 f1ppppp3
+#idiom
+as well
+used to

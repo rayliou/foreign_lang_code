@@ -1,0 +1,22 @@
+<style>
+    .NOUN {
+        color: crimson;
+        background-color: aqua;
+
+    }
+    .VERB{
+        background-color: green;
+        color: gold;
+    }
+    .PHRASAL{
+        background-color: crimson;
+    }
+    .IDIOM{
+        background-color: burlywood;
+    }
+
+    .lemma{
+        background-color: burlywood;
+    }
+</style>
+
