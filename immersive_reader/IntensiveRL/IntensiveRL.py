@@ -8,6 +8,11 @@ from spacy.matcher import PhraseMatcher
 from spacy.tokens import Token,Span
 from LoadWordList import LoadWordList
 import inspect
+try:
+    from html import escape  # python 3.x
+except ImportError:
+    from cgi import escape  # python 2.x
+from FilterHtml import FilterHtml
 
 currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
 
@@ -30,6 +35,15 @@ def longSentence(nlp):
     displacy.serve(sentence_spans, style="dep")
     pass
 
+class PseudoSpan:
+    def __init__(self, span):
+        self.start = span.end -1
+        self.end   =  span.start
+        self.span   =  span
+        pass
+    def __repr__(self):
+        return self.span.text
+    pass
 
 #nlp = spacy.load("en_core_web_sm")
 ##matcherTest(nlp)
@@ -80,6 +94,8 @@ class IntensiveRL:
         Token.set_extension(name='freq',default=None)
         Span.set_extension(name='freq', default=None)
         self.outputObj_ = None
+        self.wordRe_    = r"""^[a-zàâçéèêëîïôûùüÿñæœ .-]+$"""
+        self.wordRe_    = re.compile(self.wordRe_,re.I)
         #for idioms
         pass
 
@@ -89,7 +105,8 @@ class IntensiveRL:
     def processStdin(self):
         #FIXME: txt = sys.stdin.read()
         filePath  = f'{currentdir}/../IntensiveRL_test_data/GitHub Flavored Markdown Spec.md'
-        txt = open(filePath,'r').read(512)
+        txt = open(filePath,'r').read()
+        txt = FilterHtml(txt).plainTxt
         self.doc_ = self.nlp_(txt)
         for token in self.doc_:
             self.matchForSingWord(token)
@@ -97,21 +114,11 @@ class IntensiveRL:
         self.gatherStatForPhrasalVerbs()
 
         self.matchIdioms(token)
-        self.renderOutputV0()
         self.renderOutputBySentences()
         pass
 
     def renderOutputBySentences(self):
         outList  = []
-        class PseudoSpan:
-            def __init__(self, span):
-                self.start = span.end -1
-                self.end   =  span.start
-                self.span   =  span
-                pass
-            def __repr__(self):
-                return self.span.text
-            pass
         def sortFunction(i):
             if type(i) == spacy.tokens.token.Token:
                 return (i.i, -i.i)
@@ -136,9 +143,11 @@ class IntensiveRL:
             outList.append(span)
             outList.append(PseudoSpan(span))
             # print(f'[{span.text}]')
-        # sys.exit(0)
-
         outList= sorted(outList, key=sortFunction)
+        self.outputSegments(outList, 0, 0)
+        pass
+
+    def debug(self,outList):
         for o in outList:
             if type(o)  == PseudoSpan:
                 print(f'P\t{o.span.start},{o.span.end}\t{o}')
@@ -146,9 +155,7 @@ class IntensiveRL:
                 print(f'W\t{o.i},{o.i}')
             else:
                 print(f'I\t{o.start},{o.end}')
-        self.outputSegments(outList, 0, 0)
         pass
-    pass
 
     def matchForSingWord(self,token):
         ignorePoses_ = { 'DET','SPACE','AUX', 'PRON', 'PUNCT', 'NUM' }
@@ -156,8 +163,7 @@ class IntensiveRL:
             return
         if len(token.text ) == 1:
             return
-        #TODO to verify the behaviors aobut French
-        if not token.text[0].isalpha():
+        if re.match(self.wordRe_,token.text) is None:
             return
         if len(token.text ) == 2 and \
         not (token.text[0].isalpha() and token.text[1].isalpha() ):
@@ -239,40 +245,16 @@ class IntensiveRL:
         print(s,end = '')
         pass
 
-    def outputPrefix(self, seg, prevOutPos):
-        if type(seg) == spacy.tokens.token.Token:
-            #TODO: lack of word frequency.
-            rank_exam_cat = ''
-            #TODO
-            normLemma     = seg.lemma_
-            clsSpan  = f'{seg.pos_} {rank_exam_cat} {normLemma}'
-            idSpan   = f''
-            l = f'<span class="lemma" lemma="{seg.lemma_}"></span>'
-            s = f'<span class="{clsSpan}" id="{idSpan}">{l}{seg.text}</span>'
-
-
-            # s = f'<span>{seg.text}</span>'
-            # s  = '<span class="tk_lemma"> lemma=[{}] </span><span class="{}" id="{}{}">{}</span>'.format(
-            #         seg.lemma_,
-            #         seg.pos_
-            #         , seg._.freq['w'].replace(' ', '_')
-            #         , seg._.freq['idx_num']
-            #         , seg.text
-            #         )
-            if prevOutPos <= seg.i:
-                self.outputString(self.doc_[prevOutPos:seg.i])
-            self.outputString(s)
-            return seg.i+1
+    def startSpan(self, seg, prevOffset):
         if seg._.freq['type']  == WordOrSpanReferences.SENTENCE:
             self.outputString(f'[{seg.text}]\t\t')
             self.outputString('<span class="s">')
-            # self.sentenceCnt_ +=1
-            return prevOutPos
+            return prevOffset
         phrase_idiom  = 'PHRASAL' if seg._.freq['type']  ==  WordOrSpanReferences. PHRASAL_VERB else 'IDIOM'
-        if prevOutPos <= seg.start:
-            self.outputString(self.doc_[prevOutPos:seg.start])
-        l = f'<span class="lemma" lemma="{self.wl_.getExactLemma(seg.lemma_)}"></span>'
-        c  = phrase_idiom
+        if prevOffset <= seg.start:
+            self.outputString(self.doc_[prevOffset:seg.start])
+        l = f'<span class="lemma" lemma="{escape(self.wl_.getExactLemma(seg.lemma_))}"></span>'
+        c  = escape(phrase_idiom)
         s = f'<span class="{c}" ">{l}'
         # s = '<span class="{}_lemma"> lemma=[{}]</span><span class="{}" id="{}{}">'.format(
         #         phrase_idiom,
@@ -284,79 +266,42 @@ class IntensiveRL:
         self.outputString(s)
         return seg.start
 
-    def outputSufix(self, seg, prevOutPos):
-        if type(seg) == spacy.tokens.token.Token:
-            return prevOutPos
-        self.outputString(self.doc_[prevOutPos:seg.end])
+    def writeWord(self, seg, prevOffset):
+        #TODO: lack of word frequency.
+        rank_exam_cat = ''
+        #TODO
+        normLemma     = seg.lemma_
+        clsSpan  = f'{seg.pos_} {rank_exam_cat} {normLemma}'
+        clsSpan  = escape(clsSpan)
+        idSpan   = f''
+        l = f'<span class="lemma" lemma="{escape(seg.lemma_)}"></span>'
+        s = f'<span class="{clsSpan}" id="{idSpan}">{l}{seg.text}</span>'
+        if prevOffset <= seg.i:
+            self.outputString(self.doc_[prevOffset:seg.i])
+        self.outputString(s)
+        return seg.i+1
+
+    def closeSpan(self, seg, prevOffset):
+        seg = seg.span
+        self.outputString(self.doc_[prevOffset:seg.end])
         self.outputString('</span>')
         if seg._.freq['type']  == WordOrSpanReferences.SENTENCE:
             self.outputString('\n@@@@@@@@@@@@@@@@@@@@\n')
         return seg.end
 
-    def isIn(self, s2,s1):
-        """ s2 is in s1 """
-        if type(s1) == spacy.tokens.token.Token:
-            return False
-        b  = s2.i if type(s2) == spacy.tokens.token.Token else s2.start
-        e  = s2.i+1  if type(s2) == spacy.tokens.token.Token else s2.end
-        out =  b >= s1.start and e <= s1.end
-        if out :
-            s2._.freq['parent']= s1
-        return out
-
-
-    def peekSegment(self, outList,i, prevOffset):
-        Len = len(outList)
-        if i+1 >= Len or  not self.isIn(outList[i+1], outList[i]):
-            return i,prevOffset
-        i += 1
-        s = outList[i]
-
-        prevOffset  = self.outputPrefix(s,prevOffset)
-        i,prevOffset= self.peekSegment(outList,i,prevOffset)
-        prevOffset = self.outputSufix(s,prevOffset)
-        return i, prevOffset
-
     def outputSegments(self, outList, prevOffset, i= 0):
-        while i < len(outList):
-            s = outList[i]
-            prevOffset  = self.outputPrefix(s,prevOffset)
-            i,prevOffset= self.peekSegment(outList,i,prevOffset)
-            prevOffset = self.outputSufix(s,prevOffset)
-            i+=1
+        for o in outList:
+            if type(o)  == PseudoSpan:
+                prevOffset = self.closeSpan(o,prevOffset)
+            elif type(o) == spacy.tokens.token.Token:
+                prevOffset = self.writeWord(o,prevOffset)
+            else:
+                prevOffset = self.startSpan(o,prevOffset)
+
         self.outputString(self.doc_[prevOffset:])
         return prevOffset
 
 
-    def renderOutputV0(self):
-        'deprecated'
-        return
-        outList  = []
-        def sortFunction(i):
-            if type(i) == spacy.tokens.token.Token:
-                return (i.i, -i.i)
-            return (i.start, -i.end)
-        #sort all token and span
-        for k,t in self.idiomsDict_.items():
-            for span in t.r_:
-                outList.append(span)
-        for k,t in self.singleWordsDict_.items():
-            #print('{},{}'.format(t.len_,k))
-            for token in t.r_:
-                outList.append(token)
-        for k,t in self.prVerbsDict_.items():
-            #print('{},{}'.format(t.len_,k))
-            for span in t.r_:
-                outList.append(span)
-        sys.exit(0)
-        #shorter range is following the longer one.
-        for span in self.doc_.sents:
-            span._.freq  = { 'type': WordOrSpanReferences.SENTENCE, }
-            outList.append(span)
-
-        outList= sorted(outList, key=sortFunction)
-        self.outputSegments(outList, 0, 0)
-        pass
     pass
 
 if __name__ == "__main__":

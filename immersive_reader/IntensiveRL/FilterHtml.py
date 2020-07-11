@@ -43,6 +43,11 @@ class FilterHtml:
         #return self.plainTxt_
         return out
 
+    @property
+    def plainTxt(self):
+        return self.plainTxt_
+
+
     def build_(self):
         #(ob, oe,nb,ne) origin_begin/end, new_begin/end
         ob, oe,nb,ne  = 0, -1,0,0
@@ -125,7 +130,7 @@ def filterHtml_t():
     <b> take hhhhhhhhh <span> care <span> of </b>
     """
     h = FilterHtml(ss)
-    print(h)
+    print(h.plainTxt)
 
 
 if __name__ == "__main__":

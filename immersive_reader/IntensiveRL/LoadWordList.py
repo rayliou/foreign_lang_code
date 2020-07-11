@@ -69,12 +69,18 @@ class LoadWordList:
 
 
     def isStopWord(self,w):
+        return False
+        #TODO
         return w in self.stopWords_
 
     def isStopPhrasalVerb(self,w):
+        return False
+        #TODO
         return w in self.stopPhrasalVerbs_
 
     def isStopIdiom(self,w):
+        return False
+        #TODO
         return w in self.stopIdioms_
 
     def getIncludeIdioms(self):
